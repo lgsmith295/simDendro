@@ -33,7 +33,7 @@ plot(10:1)
 knitr::kable(head(mtcars, 10))
 ```
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 library(devtools)
 install_github(repo = "lgsmith295/simDendro")
 ```
@@ -63,6 +63,7 @@ $$
 
 
 ```{r}
+library(simDendro)
 years <- 1:50
 
 # Growth

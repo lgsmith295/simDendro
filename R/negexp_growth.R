@@ -16,8 +16,3 @@ negexp_growth <- function(n, a, b, k = 0) {
   return(rwl_bio)
 }
 
-growth <- negexp_growth(50, 1, 0.1, 0.0001)
-plot(growth, type = "b")
-
-# test
-negex_growth(0, 1, 0.1)
