@@ -33,7 +33,7 @@ plot(10:1)
 knitr::kable(head(mtcars, 10))
 ```
 
-```{r}
+```{r, warning=FALSE, message=FALSE}
 library(devtools)
 install_github(repo = "lgsmith295/simDendro")
 ```
