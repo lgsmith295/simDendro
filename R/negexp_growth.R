@@ -1,4 +1,4 @@
-#' Add together two numbers.
+#' negexp_growth
 #'
 #' @param n Number of years to be simulated
 #' @param a Intercept

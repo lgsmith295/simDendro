@@ -33,7 +33,7 @@ plot(10:1)
 knitr::kable(head(mtcars, 10))
 ```
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 library(devtools)
 install_github(repo = "lgsmith295/simDendro")
 ```
@@ -62,7 +62,8 @@ log(rwl_{it}) = \alpha_{0it} + \alpha_{1it} age_{it} + \beta X_{it} + \epsilon_{
 $$
 
 
-```{r}
+```{r, fig.width=8, fig.height=4}
+library(simDendro)
 years <- 1:50
 
 # Growth
@@ -93,3 +94,38 @@ rwl <- growth * eta * error
 plot(rwl, type = "b")
 
 ```
+
+```{r, fig.width=8, fig.height=4}
+library(simDendro)
+years <- 1:50
+
+# Growth
+growth <- negexp_growth(length(years), 1, 0.03, 0.001)
+plot(growth, type = "b")
+
+# climate
+mu_climate <- 10 + 0.1 * years
+climate <- rnorm(length(years), mu_climate, 3)
+plot(climate, type = "l")
+
+# Climate effect on growth
+beta_mu <- 0.8 # real scale slope - 1 degree C increase in T results in this change in mm tree ring growth
+# log_beta <- log(beta_mu)
+beta <- rnorm(length(years), beta_mu, 0.05)
+eta <- beta * climate
+plot(eta, type = "l")
+plot(climate, eta)
+
+# IID error
+eps <- rnorm(length(years), -2.5, 0.5)
+error <- exp(eps)
+summary(error)
+plot(error, type = "l")
+
+# Put growth model together
+rwl <- growth * eta * error
+plot(rwl, type = "b")
+
+```
+
+
