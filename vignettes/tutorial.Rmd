@@ -194,6 +194,279 @@ plot(rwl, type = "b")
 
 ## Create series for multiple trees with the same climate
 
+```{r}
+##### NegExp Growth - Mean Climate #####
+years <- 1:500
+
+# Growth
+growth <- negexp_growth(length(years), 1, 0.03, 0.001)
+plot(growth, type = "b")
+
+# climate random, uncorrelated around mean
+mu_climate <- 12
+climate <- rnorm(length(years), mu_climate, 3)
+plot(climate, type = "l")
+
+# Climate effect on growth
+beta_mu <- 0.8 # real scale slope - 1 degree C increase in T results in this change in mm tree ring growth
+# log_beta <- log(beta_mu)
+beta <- rnorm(length(years), beta_mu, 0.05)
+eta <- beta * climate
+plot(eta, type = "l")
+plot(climate, eta)
+
+# IID error
+eps <- rnorm(length(years), -2.5, 0.5)
+error <- exp(eps)
+summary(error)
+plot(error, type = "l")
+
+# Put growth model together
+rwl <- growth * eta * error
+plot(rwl, type = "b")
+
+
+# loop over multiple trees
+M <- 100 # number of trees
+Tea <- 500
+years <- 1500 + 1:Tea
+
+# Growth
+tgrowth <- matrix(NA, nrow = Tea, ncol = M)
+# assume each tree lives 200 years for simplicity and germinated in a random year between 1350 and 1950 - assumes can't get to pith in older trees
+fy <- floor(runif(M, 1351, 1951))
+k <- rlnorm(M, log(0.2), 0.2) # tree biological growth curves vary
+b <- rlnorm(M, log(0.04), 0.1) # tree biological growth curves vary
+a <- rlnorm(M, log(1), 0.2) # tree biological growth curves vary - maybe should be multivariate normal between the parameters
+hist(a)
+hist(b)
+hist(k)
+sd(b)
+
+for(i in 1:M) {
+  bio <- negexp_growth(200, a[i], b[i], k[i])
+  yrs <- fy[i]:(fy[i] + 199)
+  df_tmp <- data.frame(tree = i, year = yrs, bio)
+  if(i == 1) {
+    df <- df_tmp
+  } else {
+    df <- bind_rows(df, df_tmp)
+  }
+}
+
+str(df)
+
+# climate random, uncorrelated around mean
+mu_climate <- 12
+climate <- rnorm(Tea, mu_climate, 3)
+plot(climate, type = "l")
+
+# Climate effect on growth
+mu_beta <- 0.8 # real scale slope - 1 degree C increase in T results in this change in mm tree ring growth
+# log_beta <- log(beta_mu)
+beta <- rnorm(Tea, mu_beta, 0.05) # this should probably vary by tree but I guess that's going into other variance components
+eta <- beta * climate
+plot(eta, type = "l")
+plot(climate, eta)
+eta <- data.frame(year = years, eta, climate)
+
+# IID error
+eps <- rnorm(Tea, -2.5, 0.5)
+error <- exp(eps)
+summary(error)
+plot(error, type = "l")
+
+# Random IID tree variance among years
+sigma_eps_i <- rlnorm(M, log(0.5), 0.05)
+hist(sigma_eps_i)
+eps_ij <- data.frame(expand.grid(tree = 1:M, year = years, eps = NA_real_)) %>%
+  dplyr::arrange(tree, year)
+for(i in 1:M) {
+  eps_ij[which(eps_ij$tree == i), ]$eps <- rlnorm(Tea, log(0.08), sigma_eps_i[i])
+}
+hist(eps_ij$eps)
+# tree_sd <- data.frame(tree = 1:M, eps_i = eps_i)
+
+# Put model together
+rwl_long <- df %>%
+    group_by(tree) %>%
+    left_join(eta) %>%
+    left_join(eps_ij) %>%
+    mutate(rwl = bio * eta * eps,
+           rwi = rwl - bio,
+           climate_std = (climate - mean(climate, na.rm = TRUE)) / sd(climate, na.rm = TRUE)) %>%
+    dplyr::filter(year %in% years)
+
+ggplot(rwl_long, aes(year, rwl)) + geom_line(alpha = 0.3, color = "blue") + theme(legend.position = "none") + theme_bw()
+
+ggplot(rwl_long, aes(year, rwi)) + geom_point(alpha = 0.1, color = "turquoise") + theme(legend.position = "none") + theme_bw()
+
+ggplot(rwl_long, aes(year, rwi)) + 
+  geom_point(alpha = 0.1, color = "turquoise", aes(group = tree)) + 
+  geom_smooth() + 
+  geom_line(aes(year, climate_std), alpha = 0.1) + 
+  geom_smooth(aes(year, climate_std), color = "red", alpha = 0.5) + 
+  theme(legend.position = "none") + 
+  theme_bw()
+
+# just show 1st 10 trees
+rwl_small <- rwl_long %>%
+  dplyr::filter(tree %in% 11:20)
+
+ggplot(rwl_small, aes(year, rwl, group = tree, color = as.factor(tree))) + geom_line(alpha = 0.3) + theme_bw() + theme(legend.position = "none")
+
+
+##### Allow climate to vary over time #####
+
+# Growth
+growth <- negexp_growth(length(years), 1, 0.03, 0.1)
+plot(growth, type = "b")
+
+# Climate: autoregressive model around set mean
+mu_climate <- 12
+yt <- arima.sim(n=500, list(order=c(1,0,0),ar=0.9), sd = 0.5) + mu_climate  # adding intercept and trend to the autoregressive 
+plot(yt)
+acf(yt)
+
+### Climate: autoregressive model with linear trend
+mu_climate <- 12
+yt <- arima.sim(n=500, list(order=c(1,0,0),ar=0.9), sd = 0.5) + mu_climate + years*0.01  # adding intercept and trend to the autoregressive 
+plot(yt)
+acf(yt)
+
+
+### Climate: basis splines
+mu_climate <- 12
+
+library(mgcv)
+x <- seq(0,500,length=501)
+knots1 <- seq(0, 500, by = 100)
+sm <- smoothCon(s(x,bs="bs"), data.frame(x), knots = data.frame(knots1))[[1]] # addition of knots function not working and not throwing warning or error
+matplot(1:501, sm$X, type="l",xlab="Time",ylab="Basis function, Bj(X)",cex.lab=1.5,cex.axis=1.5,lwd=2)
+
+set.seed(416923)
+beta  <- rnorm(ncol(sm$X), 0, 3)
+g <- (sm$X %*% beta) + mu_climate
+plot(g, type = "l")
+
+# add random noise around trend
+climate <- g + rnorm(length(g), 0, 2)
+plot(climate, type = "l")
+acf(climate)
+
+# loop over multiple trees
+M <- 100 # number of trees
+Tea <- 500
+years <- 1500 + 1:Tea
+
+# Growth
+
+# assume each tree lives 200 years for simplicity and germinated in a random year between 1350 and 1950 - assumes can't get to pith in older trees
+fy <- floor(runif(M, 1351, 1951))
+k <- rlnorm(M, log(0.2), 0.2) # tree biological growth curves vary
+b <- rlnorm(M, log(0.04), 0.1) # tree biological growth curves vary
+a <- rlnorm(M, log(1), 0.2) # tree biological growth curves vary - maybe should be multivariate normal between the parameters
+hist(a)
+hist(b)
+hist(k)
+sd(b)
+
+for(i in 1:M) {
+  bio <- negexp_growth(200, a[i], b[i], k[i])
+  yrs <- fy[i]:(fy[i] + 199)
+  df_tmp <- data.frame(tree = i, year = yrs, bio)
+  if(i == 1) {
+    df <- df_tmp
+  } else {
+    df <- bind_rows(df, df_tmp)
+  }
+}
+
+str(df)
+
+# climate spline
+mu_climate <- 12
+
+library(mgcv)
+x <- years
+knots1 <- seq(0, max(years), by = 100)
+sm <- smoothCon(s(x,bs="bs"), data.frame(x), knots = data.frame(knots1))[[1]] # addition of knots function not working and not throwing warning or error
+
+set.seed(416923)
+beta  <- rnorm(ncol(sm$X), 0, 3)
+g <- (sm$X %*% beta) + mu_climate
+# plot(g, type = "l")
+
+# add random noise around trend
+climate <- g + rnorm(length(g), 0, 0.5)
+# plot(climate, type = "l")
+# acf(climate)
+
+# Climate effect on growth
+mu_beta <- 0.8 # real scale slope - 1 degree C increase in T results in this change in mm tree ring growth
+# log_beta <- log(beta_mu)
+beta <- rnorm(Tea, mu_beta, 0.05) # this should probably vary by tree but I guess that's going into other variance components
+eta <- beta * climate
+# plot(eta, type = "l")
+# plot(climate, eta)
+eta <- data.frame(year = years, eta, climate)
+
+# IID error
+eps <- rnorm(Tea, -2.5, 0.5)
+error <- exp(eps)
+# summary(error)
+# plot(error, type = "l")
+
+# Random IID tree variance among years
+sigma_eps_i <- rlnorm(M, log(0.5), 0.05)
+hist(sigma_eps_i)
+eps_ij <- data.frame(expand.grid(tree = 1:M, year = years, eps = NA_real_)) %>%
+  dplyr::arrange(tree, year)
+for(i in 1:M) {
+  eps_ij[which(eps_ij$tree == i), ]$eps <- rlnorm(Tea, log(0.08), sigma_eps_i[i])
+}
+# hist(eps_ij$eps)
+# tree_sd <- data.frame(tree = 1:M, eps_i = eps_i)
+
+# Put model together
+rwl_long <- df %>%
+  group_by(tree) %>%
+  left_join(eta) %>%
+  left_join(eps_ij) %>%
+  mutate(rwl = bio * eta * eps,
+         rwi = rwl - bio,
+         rwi_div = rwl / bio,
+         climate_std = (climate - mean(climate, na.rm = TRUE)) / sd(climate, na.rm = TRUE)) %>%
+  dplyr::filter(year %in% years)
+
+ggplot(rwl_long, aes(year, rwl)) + geom_line(alpha = 0.3, color = "blue") + theme(legend.position = "none") + theme_bw()
+
+ggplot(rwl_long, aes(year, rwi)) + geom_point(alpha = 0.1, color = "turquoise") + theme(legend.position = "none") + theme_bw()
+
+ggplot(rwl_long, aes(year, rwi)) + 
+  geom_point(alpha = 0.1, color = "turquoise", aes(group = tree)) + 
+  geom_smooth() + 
+  geom_line(aes(year, climate_std), alpha = 0.1) + 
+  geom_smooth(aes(year, climate_std), color = "red", alpha = 0.5) + 
+  theme(legend.position = "none") + 
+  theme_bw()
+
+ggplot(rwl_long, aes(year, rwi_div)) + 
+  geom_point(alpha = 0.1, color = "turquoise", aes(group = tree)) + 
+  geom_smooth() + 
+  geom_line(aes(year, climate_std), alpha = 0.1) + 
+  geom_smooth(aes(year, climate_std), color = "red", alpha = 0.5) + 
+  theme(legend.position = "none") + 
+  theme_bw()
+
+# just show 1st 10 trees
+rwl_small <- rwl_long %>%
+  dplyr::filter(tree %in% 11:20)
+
+ggplot(rwl_small, aes(year, rwl, group = tree, color = as.factor(tree))) + geom_line(alpha = 0.3) + theme_bw() + theme(legend.position = "none")
+
+```
+
 
 ## Partial Samples (not near pith) - maybe move this to own repository using the package and separate from the vignette
 
