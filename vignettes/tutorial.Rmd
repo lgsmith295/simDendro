@@ -70,7 +70,7 @@ years <- 1:50
 growth <- negexp_growth(length(years), 1, 0.03, 0.001)
 plot(growth, type = "b")
 
-# climate
+# climate random, uncorrelated around mean
 mu_climate <- 12
 climate <- rnorm(length(years), mu_climate, 3)
 plot(climate, type = "l")
@@ -95,12 +95,14 @@ plot(rwl, type = "b")
 
 ```
 
+## climate with linear trend and random noise
+
 ```{r, fig.width=8, fig.height=4}
 library(simDendro)
 years <- 1:50
 
 # Growth
-growth <- negexp_growth(length(years), 1, 0.03, 0.001)
+growth <- negexp_growth(length(years), 1, 0.03, 0.1)
 plot(growth, type = "b")
 
 # climate
@@ -128,4 +130,72 @@ plot(rwl, type = "b")
 
 ```
 
+## Allow climate to vary over time
+
+```{r}
+years <- 1:500
+
+# Growth
+growth <- negexp_growth(length(years), 1, 0.03, 0.1)
+plot(growth, type = "b")
+
+# Climate: autoregressive model around set mean
+mu_climate <- 12
+yt <- arima.sim(n=500, list(order=c(1,0,0),ar=0.9), sd = 0.5) + mu_climate  # adding intercept and trend to the autoregressive 
+plot(yt)
+acf(yt)
+
+### Climate: autoregressive model with linear trend
+mu_climate <- 12
+yt <- arima.sim(n=500, list(order=c(1,0,0),ar=0.9), sd = 0.5) + mu_climate + years*0.01  # adding intercept and trend to the autoregressive 
+plot(yt)
+acf(yt)
+
+
+### Climate: basis splines
+mu_climate <- 12
+
+library(mgcv)
+x <- seq(0,500,length=501)
+knots1 <- seq(0, 500, by = 100)
+sm <- smoothCon(s(x,bs="bs"), data.frame(x), knots = data.frame(knots1))[[1]] # addition of knots function not working and not throwing warning or error
+matplot(1:501, sm$X, type="l",xlab="Time",ylab="Basis function, Bj(X)",cex.lab=1.5,cex.axis=1.5,lwd=2)
+
+set.seed(416923)
+beta  <- rnorm(ncol(sm$X), 0, 3)
+g <- (sm$X %*% beta) + mu_climate
+plot(g, type = "l")
+
+# add random noise around trend
+climate <- g + rnorm(length(g), 0, 2)
+plot(climate, type = "l")
+acf(climate)
+
+# Climate effect on growth
+beta_mu <- 0.8 # real scale slope - 1 degree C increase in T results in this change in mm tree ring growth
+# log_beta <- log(beta_mu)
+beta <- rnorm(length(years), beta_mu, 0.05)
+eta <- beta * climate
+plot(eta, type = "l")
+plot(climate, eta)
+
+# IID error
+eps <- rnorm(length(years), -2.5, 0.5)
+error <- exp(eps)
+summary(error)
+plot(error, type = "l")
+
+# Put growth model together
+rwl <- growth * eta * error
+plot(rwl, type = "b")
+
+
+```
+
+## Create series for multiple trees with the same climate
+
+
+## Partial Samples (not near pith) - maybe move this to own repository using the package and separate from the vignette
+
+Simulate all tree growth using a biological growth model but then cut off the samples to more recent years due to things like heart rot, alternative growth forms, and missing the pith. See how different models assuming different growth (e.g. negex, spline, linear, mean) recover the data and reconstruct climate.
 

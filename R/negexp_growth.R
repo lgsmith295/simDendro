@@ -9,7 +9,7 @@
 #' growth <- negexp_growth(50, 1, 0.1, 0.0001)
 #' plot(growth, type = "b")
 
-negexp_growth <- function(n, a, b, k = 0) {
+negexp_growth <- function(n = 100, a = 0.8, b = 0.05, k = 0.1) {
   if(n < 1) stop("n must be a positive integer")
   t <- 1:n
   rwl_bio <- a * exp(-b * t) + k
